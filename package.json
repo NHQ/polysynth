@@ -20,9 +20,24 @@
   "author": "",
   "license": "",
   "dependencies": {
+    "amod": "^2.0.0",
+    "amplitude-viewer": "0.0.2",
+    "beatmath": "^0.4.0",
     "brfs": "^1.4.3",
     "inherits": "^2.0.1",
-    "jsynth-waveform": "^1.1.0"
+    "jbuffers": "^1.3.0",
+    "jdelay": "^9.1.0",
+    "jigger": "^1.0.0",
+    "jsynth-sync": "^0.14.0",
+    "jsynth-waveform": "^1.1.0",
+    "keycode": "^2.1.0",
+    "meffisto": "^0.2.0",
+    "nvelope": "^0.12.0",
+    "oscillators": "^1.0.0",
+    "since-when": "^3.6.0",
+    "teoria": "^2.2.0",
+    "uuid": "^2.0.1",
+    "westerns": "^0.2.0"
   },
   "devDependencies": {
     "xhr": "^2.2.0"

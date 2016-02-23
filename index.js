@@ -1,5 +1,7 @@
 var fs = require('fs')
+var uuid = require('uuid').v4
 var metastasis = fs.readFileSync('./stateMachine.js', 'utf8')
+var cheatcode = require('./cheatcode')
 
 var jsynth = require('../jsynth/stereo')
 var falafel = require('falafel')
@@ -13,14 +15,14 @@ var ap = app.prototype
 function app(master, synth, channels){ // synth is a jsynth function
   if(!(this instanceof app)) return new app(master, synth)
   this.master = master
-  this.rate = master.sampleRate
+  this.rate = this.sampleRate = master.sampleRate
   this.channels = channels || 1
   this.nodes = []
   this.vals = []
   this.dsp = undefined
   this.script = synth
   this.auto = false
-  this.state = undefined
+  this.state = {} 
 }
 
 ap.stateSynth = function(script){
@@ -28,6 +30,7 @@ ap.stateSynth = function(script){
     var vals = []
     var fn = undefined 
     script = script || this.script
+    this.script = script
 /*    var s = falafel(new Function([], script), function(node){
       if(node.type === 'VariableDeclarator' && node.id && node.id.name === 'state') {
         node.init.elements.forEach(function(e,i){
@@ -41,20 +44,27 @@ ap.stateSynth = function(script){
     })
     fn = s.toString()
 */
-    console.log($ui)
-    prefun = new Function(['$ui'], script)
-    console.log(fn)
-    fn = prefun($ui)
-    console.log(fn, fn.toString())
+    //console.log($ui)
+    prefun = new Function(['$ui', '$', 'sampleRate'], script)
+    //console.log(fn)
+    fn = prefun($ui, cheatcode, self.sampleRate)
     self.dsp = function(t, c, i){
       return fn(t, c, i)
     }
-
+    self.synth = self.dsp
     return this.nodes.length ? {ui: self.nodes, synth: self.dsp} : undefined 
 
     function $ui(ob){
-      self.state = self.state || {}
       var keys = Object.keys(ob)
+      var state = Object.keys(self.state)
+      state.forEach(function(e){
+        if(!~keys.indexOf(e)){ //  remove from self.nodes, ie the ui
+          self.nodes = self.nodes.map(function(el){
+            return el.dataset['name'] === e ? null : el
+          }).filter(Boolean)
+          delete self.state[e]
+        }
+      })
       keys.forEach(function(j){
         
         if(typeof ob[j] === 'Object'){
@@ -66,13 +76,15 @@ ap.stateSynth = function(script){
           
         }
         else{
-          if(self.state[j]) return self.state[j] = ob[j]
+          if(self.state[j]) return self.state[j] 
           var v = ob[j]
           var spinner = knob(function(d, a){
             self.state[j] = self.state[j] + d / Math.PI / 2
-            console.log(self.state[j])
-            fn = prefun($ui)
+            //console.log(self.state[j])
+            update()
           })
+          spinner.dataset['name'] = j
+          spinner.dataset['uuid'] = uuid()
           self.nodes.push(spinner)
           self.state[j] = ob[j]
         }
@@ -94,13 +106,14 @@ ap.stateSynth = function(script){
     }
 
     function update(){
-      fn = prefun($ui)
+      fn = prefun($ui, cheatcode, self.sampleRate)
     }
 }
 
-
 ap.autoSynth = function(script){
   script = script || this.script
+  this.script = script
+  var self = this
   var nodes = []
   var vals = []
   var f32s = undefined
@@ -113,14 +126,15 @@ ap.autoSynth = function(script){
           vals[l] = vals[l] + d / Math.PI / 2
           update()
         })
+        spinner.dataset['uuid'] = uuid()
         nodes.push(spinner)
         node.update('$ui['+ l +']')
         vals.push(node.value)
       }
     }
   })
-  var prefun = new Function('$ui', 'return (' + fn.toString() + ')($ui)')
-  var synth = prefun(vals)
+  var prefun = new Function(['$ui', '$', 'sampleRate'], 'return (' + fn.toString() + ')($ui, $, sampleRate)')
+  var synth = prefun(vals, cheatcode, self.sampleRate)
   var dsp = function(t, s, i){
     return synth(t, s, i)
   }
@@ -129,7 +143,7 @@ ap.autoSynth = function(script){
   return {ui: nodes, synth: dsp}
   
   function update(){
-    synth = prefun(vals)
+    synth = prefun(vals, cheatcode, self.sampleRate)
 /*
     vals = []
     var f = falafel(script, function(node){
@@ -152,11 +166,12 @@ ap.init = function(){
   return dsp
 }
 
-ap.process = function(dur){
+ap.process = function(dur, start){
   var out1 = new Float32Array(Math.floor(this.master.sampleRate * dur))
   var rate = this.rate
+  start = start || 0
   for(var x = 0; x < out1.length; x++){
-    var t = x / rate
+    var t = x / rate + start
     var ret = this.synth(t, x, 0)
     out1[x] = ret
   }

@@ -1,10 +1,13 @@
 var fs = require('fs')
 var uuid = require('uuid').v4
-var metastasis = fs.readFileSync('./stateMachine.js', 'utf8')
+
+//var metastasis = fs.readFileSync('./stateMachine.js', 'utf8')
 var cheatcode = require('./cheatcode')
 
 var jsynth = require('../jsynth/stereo')
 var falafel = require('falafel')
+var para = require('../parametrical')
+
 var knob = require('../parametrical/knob')
 //var knob = require('../parametrical/xy')
 
@@ -47,13 +50,29 @@ ap.stateSynth = function(script){
     //console.log($ui)
     prefun = new Function(['$ui', '$', 'sampleRate'], script)
     //console.log(fn)
-    fn = prefun($ui, cheatcode, self.sampleRate)
+    fn = prefun($pui, cheatcode, self.sampleRate)
+    
+    //fn = prefun($ui, cheatcode, self.sampleRate)
     self.dsp = function(t, c, i){
       return fn(t, c, i)
     }
     self.synth = self.dsp
+    
     return this.nodes.length ? {ui: self.nodes, synth: self.dsp} : undefined 
 
+    function $pui(obj){
+      var ui = para(obj, function(st){
+        fn = prefun(supdate, cheatcode, self.sampleRate)
+      })
+      self.nodes = ui
+      self.state = ui.state
+      return ui.state
+    }
+      function supdate(obj, state){
+        return self.state
+        //fn = prefun($pui, cheatcode, self.sampleRate)
+      }
+    
     function $ui(ob){
       var keys = Object.keys(ob)
       var state = Object.keys(self.state)

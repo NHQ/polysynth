@@ -61,7 +61,7 @@ ap.stateSynth = function(script){
     return this.nodes.length ? {ui: self.nodes, synth: self.dsp} : undefined 
 
     function $pui(obj){
-      var ui = para(obj, function(st){
+      var ui = para(obj, function(st, q){
         fn = prefun(supdate, cheatcode, self.sampleRate)
       })
       self.nodes = ui
@@ -98,9 +98,12 @@ ap.stateSynth = function(script){
           if(self.state[j]) return self.state[j] 
           var v = ob[j]
           var spinner = knob(function(d, a){
-            self.state[j] = self.state[j] + d / Math.PI / 2
+            if(d == 0) return 
             //console.log(self.state[j])
-            update()
+            else {
+              self.state[j] += dx / Math.PI / 2
+              update()
+            }
           })
           spinner.dataset['name'] = j
           spinner.dataset['uuid'] = uuid()
@@ -181,7 +184,7 @@ ap.autoSynth = function(script){
 }
 
 ap.init = function(){
-  var dsp = jsynth(this.master, this.synth)
+  var dsp = jsynth(this.master, this.synth, 256)
   return dsp
 }
 

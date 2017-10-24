@@ -1,8 +1,9 @@
 var $ = exports
-$.westerns = require('westerns')
+$.westerns = require('../westerns')
 $.oz = require('../oscillators')
+$.ph = require('../phasers')
 $.amod = require('amod')
-$.env = require('nvelope')
+$.env = $.nvelope = require('../nvelope')
 $.jsync = require('jsynth-sync')
 $.zerone = require('../zerone')
 $.jdelay = require('jdelay')
@@ -11,6 +12,11 @@ $.meffisto = require('../meffisto')
 $.zerone = require('../zerone')
 $.beatmath = require('beatmath')
 $.teoria = require('teoria')
+$.gtone = require('../gtones/array')
+$.sigdelay = require('../new-deal')
+$.dataDelay = require('../data-delay')
+$.winfunk = require('../winfunk')
+$.midi = require('web-midi')
 $.fract = function(v){
   return v - Math.floor(v)
 }
@@ -18,9 +24,11 @@ $.quant = function(v, q){
   return Math.floor(v/q)*q  
 }
 
-
 $.sigmoid = function(t){
-  return 1 / (1 + Math.pow(Math.E, -t + 6))
+  return (1 / (1 + Math.pow(Math.E, -t))) * 2 - 1
+}
+$.sigmod = function(c, r, t, f){
+  return c + (r * $.sigmoid($.amod(6, 6, t * 2, f))) 
 }
 $.alog = function(c, r, t, f){ return c + r * ((Math.log((1.0001 + $.oz.sine(t, f)) * 50) / Math.log(10))/2-2) }
 $.iir = function(d, c){

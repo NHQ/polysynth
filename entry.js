@@ -1,6 +1,13 @@
 var master = new AudioContext
+var compressor = master.createDynamicsCompressor()
+compressor.threshold.value = -30;
+compressor.knee.value = -20;
+compressor.ratio.value = 12*2;
+
+
+
 var fs = require('fs')
-var pcode = fs.readFileSync('./synth.js', 'utf8')
+var pcode = fs.readFileSync('./synths/midi.js', 'utf8')
 var jsynth = require('../jsynth')
 var dial = require('../parametrical/knob')
 var draw = require('./draw')
@@ -87,7 +94,7 @@ function viz(){
 
 function compile(){
   var script = texted.value
-  console.log(script)
+//  console.log(script)
   window.localStorage['polysynth'] = script 
   app = app || require('./')(master)
   //fn = new Function('', dsp)
@@ -98,9 +105,11 @@ function compile(){
   }
   if(!window.autoSynth){
     auto = _auto.synth
-    autoSynth = jsynth(master,auto,Math.pow(2, 13))
+    autoSynth = jsynth(master,auto,Math.pow(2, 10))
     window.autoSynth = autoSynth
     autoSynth.connect(master.destination)
+    //autoSynth.connect(compressor)
+    //compressor.connect(master.destination)
   }
   else window.requestAnimationFrame(function(){
     auto = window.autoSynth.fn = _auto.synth

@@ -8,7 +8,7 @@
     "watch:css": "nodemon -e scss -x \"npm run build:css\"",
     "prefix": "postcss --use autoprefixer -o public/style/main.css public/style/main.css",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js",
+    "start": "opa -e entry.js -o public/bundle.js -d -t brfs",
     "bundle": "browserify entry.js -o public/scripts/bundle.js -t brfs -d",
     "watch:js": "watchify entry.js -o public/scripts/bundle.js -t brfs -d",
     "watch": "npm run watch:js & npm run watch:css",

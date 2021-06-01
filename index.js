@@ -73,63 +73,6 @@ ap.stateSynth = function(script){
         //fn = prefun($pui, cheatcode, self.sampleRate)
       }
     
-    function $ui(ob){
-      var keys = Object.keys(ob)
-      var state = Object.keys(self.state)
-      state.forEach(function(e){
-        if(!~keys.indexOf(e)){ //  remove from self.nodes, ie the ui
-          self.nodes = self.nodes.map(function(el){
-            return el.dataset['name'] === e ? null : el
-          }).filter(Boolean)
-          delete self.state[e]
-        }
-      })
-      keys.forEach(function(j){
-        
-        if(typeof ob[j] === 'Object'){
-          if(self.state[j]) return self.state[j] = ob[j].value
-          
-        }
-        if(typeof ob[j] === 'Array'){ // String Lieral options shorthand
-          if(self.state[j]) return self.state[j] = ob[j]
-          
-        }
-        else{
-          if(self.state[j]) return self.state[j] 
-          var v = ob[j]
-          var spinner = knob(function(d, a){
-            if(d == 0) return 
-            //console.log(self.state[j])
-            else {
-              self.state[j] += dx / Math.PI / 2
-              update()
-            }
-          })
-          spinner.dataset['name'] = j
-          spinner.dataset['uuid'] = uuid()
-          self.nodes.push(spinner)
-          self.state[j] = ob[j]
-        }
-        function parse(o){
-          j = j.toLowerCase()
-          switch(j){
-            case 'name':
-            break
-            case 'author':
-            break
-            case 'bpm':
-            case 'tempo':
-            break
-          }
-        }
-        
-      })
-      return self.state
-    }
-
-    function update(){
-      fn = prefun($ui, cheatcode, self.sampleRate)
-    }
 }
 
 ap.autoSynth = function(script){

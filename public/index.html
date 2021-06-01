@@ -2,20 +2,32 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
+    <meta name="version" content="1.0.0">
     <title>sans titre</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="app.css">
   </head>
   <body>
+    <!--
     <div id=viewer>
       <input type=text placeholder="studio pathname"></input>
       <button class=fetch>fetch</button>
       <div id=ascope></div>      
-    </div>
+    </div-->
     <div id=editor>
-      <textarea id=texted></textarea>
+      <!--textarea id=texted></textarea-->
     </div>
-    <div id=controls></div>
+    <div id=sidebar>
+      <div id=system>
+        <button id=start>play</button>
+        <button id=record>record</button>
+        <button id=import>import</button>
+        <div id=midi>
+        </div>
+      </div>
+
+      <div id=controls></div>
+    </div>
     <script type="text/javascript" src="bundle.js"></script>
   </body>
 </html>

@@ -18,7 +18,6 @@ function draw(parent, master){
   this.paintWave = paintWave
   this.setBuffer = function(buf){
     self.duration = buf.length / self.sr
-    console.log(self.duration)
     self.buffer = buf
     self.paintWave()
   }
@@ -57,7 +56,7 @@ function draw(parent, master){
     o.buffer = self.buffer
     o.canvas = self.wave
     o.sampleRate = self.sr
-    o.chunkSize = Math.floor(o.sampleRate / 720 / 4 + Math.pow(2, Math.log(self.duration) * 3) * 2);
+    o.chunkSize = 24//Math.floor(o.sampleRate / 720 / 4 + Math.pow(2, Math.log(self.duration)));
     o.positive = 'rgba(20,20,20,1)';
     o.negative = 'rgba(255,255,255,.1)'; // the default
     o.in = null; //default to 0

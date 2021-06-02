@@ -164,28 +164,88 @@ class Generator {
 
 }
 
+class Event {
+  
+  constructor(fn){
+    this.fn = fn
+  }
+  trigger(node){
+    this.node = node
+    fn(node)
+    // create Synth ?
+    // or require Synth | Sample | Script ?
+  }
+  play(){
+    
+  }
+}
+
 class Clock {
 
-  constructor(bpm, sr){
-    this.timer = new zo(bpm, sr)
+  constructor(sr=8000, bpm=60, interval=1, beats=[1]){
     this.index = 0
     this.paused = false
     this.sr = sr
-    this.emitters = []
+    this._bpm = bpm
+    this._interval = interval
+    this._beats = beats
+    this.samplesPerBeat = Math.round( this.sr / ( bpm / 60 ) )
+    this.beatCount = 0
   }
 
-  on(interval, beats){
-    const fn = []
-    let off = this.timer.beat(interval, beats, function(time, interval, beat, val, stop){
-      fn.forEach(e => {
-        let gen = e(time, val, interval, beat)
-        if(gen){ // is typeof Synth?
-          
-        }
-      })
-    })
-    this.emitters.push(off)
-    return f => fn.push(f)
+  set bpm(_bpm){
+    this._bpm = _bpm
+    this.samplesPerBeat = Math.round( this.sr / ( _bpm / 60 ) )
+  }
+
+  set interval(i){
+    this._interval = i
+  }
+
+  set beats(rayray){
+    this._beats = rayray
+  }
+
+  tick(){
+    if(this.paused) return
+
+    let i = Math.ceil(this.samplesPerBeat * this._interval)
+    let s = this.index
+    // the current major interval:
+    let b = Math.floor(s / i) //% this._beats.length
+    this.beatCount = b + 1 
+    this._i = b % this._beats.length
+    this._tick(this.index, this._interval, this._beats, this._i)
+    this.index++
+   // this.index = this.index % this.samplesPerBeat
+  }
+
+  _tick(index, inter, beats, current){
+    let i = Math.ceil(this.samplesPerBeat*inter)
+    let s = index
+    if(Array.isArray(beats[current])){
+      let z = s - i * current
+      z = z % this.samplesPerBeat
+    //console.log(index, current, z)
+      let y = beats[current]
+      let val =  inter / y.length
+      let c = Math.floor(z / Math.ceil(this.samplesPerBeat * val)) % y.length
+     //console.log(y)
+      //console.log(x, y, val, z, c)
+      this._tick(z, val, y, c)
+    }
+    
+    else if(s % i == 0 && beats[current]){
+//console.log(this._i, current, beats)
+      this.trigger(beats[current], this._i, current)
+    }
+    else{
+      //console.log('non', beats[current], s , i)
+    } 
+  }
+  
+  trigger(event, beat, sub){
+    console.log(event, beat,sub, this.beatCount)
   }
 
   stop(){
@@ -200,12 +260,9 @@ class Clock {
     this.paused = false
   }
 
-  tick(t, s, i){
-    if(this.paused) return
-    this.timer.tick((++this.index)/this.sr)
-  }
 }
 
+module.exports = Clock
 // ideal
 /*
 

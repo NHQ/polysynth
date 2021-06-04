@@ -1,114 +1,28 @@
 const jsynth = require('../jsynth')
-const zo = require('../zerone')
+const jsynthb = require('../jsynth-buffer')
+const jstreambuf = require('../jsynth-stream-buf')
+const dlblob = require('./blob.js')
 
 // editor console keeps track of variables?
 // also gives instances auto named variables??
 // console maps line by line to the editor???
 
-
-class PolySynth {
-
-  constructor(master){ 
-    this.master = master
-    this.sampleRate = master.sampleRate
-    this.on = []
-    this.off = [] 
-    // keep parameterized history of events for replay, do OSC?
-    this.record = [] // event objects per synth sound, "jnotes"
-    this.eventId = 0 // to be incr
-    this.clocks = [] // zo'os
-    this.connected = []
-    this.samples = []
-    this.channels = 0
-    this.maxChannels = 12
-    this.output = master.createChannelMerger(this.maxChannels)
-    this.masterFX = new Synth(master)
-    this.masterFX.source = this.output
-    this.masterFX.destination = this.master.destination
-    this.masterFX.connect()
-
+if(!global.AudioNode){
+  global.AudioNode = class AudioNode {
+   
   }
-  
-  get destination(){
-    return this.master.destination
-  }
+}
 
-  tick(){
-    this.clocks.forEach(e => e.tick())
+const iff = function(True, False){ 
+  let fn = [False, True]
+  return function(i){ // 1 or 0 only, no ifs ands or else
+    return fn[i]
   }
-
-  createClock(bpm){
-    let clock = new Clock(bpm, this.sampleRate)
-    this.clocks.push(clock)
-    return clock
-  }
-  
-  createEvent(){
-  
-  }
-
-  createSynth(){
-  
-  }
-
-  createSample(){}
-
-  createMic(){}
-  
-  disconnect(node){
-    node.disconnect(this.output)
-    node.connected = false 
-    this.channels--
-  }
-
-  connect(node){
-    this.connected.push(node)
-    node.connect(this.output, 0, ++this.channels)
-    node.connected = true
-    this.updateChannelMerger()
-  }
-  
-  updateChannelMerger(){
-    if(this.channels == this.maxChannels){
-      let prev = this.output
-      this.max *= 2
-      let next = this.master.createChannelMerger(this.max)
-      next.connect(this.master.destination)
-      this.reconnect(prev, next)
-      this.output.disconnect(this.master.destination)
-      this.output = next
-    }
-  }
-  
-  reconnect(prev, next){
-    this.connected.forEach(e => {
-      if(e.connected) {
-        e.disconnect(prev)
-        e.connect(next)
-      }
-    })
-  }
-
-  clearClocks(){
-    this.clocks = [] 
-  }
-
-  clearConnections(){
-    this.connections.forEach(e => e.disconnect(this.master.destination)) 
-  }
-
-  clearAll(){
-    this.clearConnections()
-    this.clearClocks()
-  }
-
-
 }
 
 class Synth {
 
-  constructor(master){
-    this.context = master
+  constructor(){
     this._mods = []
     this.ultima = null
   }
@@ -133,8 +47,10 @@ class Synth {
     var source = this._source
     if(this._mods.length>0){
     // do mod magic
+    // will change source pointer
+    // also point to primero connection to original source
     } 
-    this.ultima = source
+    this.ultima = source // now the end node
     source.connect(this._destination)
   }
   
@@ -143,6 +59,7 @@ class Synth {
   }
 
 }
+
 
 class Generator {
 
@@ -166,12 +83,10 @@ class Generator {
 
 class Event {
   
-  constructor(fn){
-    this.fn = fn
+  constructor(){
   }
-  trigger(node){
-    this.node = node
-    fn(node)
+  trigger(){
+    console.log(arguments)
     // create Synth ?
     // or require Synth | Sample | Script ?
   }
@@ -191,6 +106,7 @@ class Clock {
     this._beats = beats
     this.samplesPerBeat = Math.round( this.sr / ( bpm / 60 ) )
     this.beatCount = 0
+    this.events = []
   }
 
   set bpm(_bpm){
@@ -203,6 +119,10 @@ class Clock {
   }
 
   set beats(rayray){
+    this._beats = rayray
+  }
+
+  set pattern(rayray){
     this._beats = rayray
   }
 
@@ -237,19 +157,37 @@ class Clock {
     
     else if(s % i == 0 && beats[current]){
 //console.log(this._i, current, beats)
-      this.trigger(beats[current], this._i, current)
+      this._trigger(beats[current], this._i, current)
     }
     else{
       //console.log('non', beats[current], s , i)
     } 
   }
   
-  trigger(event, beat, sub){
-    console.log(event, beat,sub, this.beatCount)
+  trigger(event){
+    this.events.push(event)
   }
 
-  stop(){
-    this.emitters.forEach(e => e.emit('end'))
+  _trigger(event, beat, sub){
+    this.events.forEach(evt => {
+      if(evt instanceof AudioNode){
+        try{
+          evt.play()
+          if(evt.start) evt.start(0)
+        } catch(err){}
+      } 
+      else if(evt instanceof Event){
+        evt.trigger(event, beat, sub, this.beatCount)
+      }
+      else if(evt instanceof Function){
+        evt(event, beat, sub, this.beatCount)
+      }
+    })
+//    console.log(event, beat,sub, this.beatCount)
+  }
+
+  clearEvents(){
+    this.events = []
   }
 
   pause(){
@@ -262,7 +200,162 @@ class Clock {
 
 }
 
-module.exports = Clock
+class PolySynth {
+
+  constructor(master){ 
+    this.master = master
+    this.sampleRate = master.sampleRate
+    // keep parameterized history of events for replay, do OSC?
+    // somewhere else ^^^
+    this.clockTime = 0
+    this.clocks = [] // zo'os
+    this.connected = []
+    this.samples = []
+    this.channels = 0
+    this.maxChannels = 12
+    this.output = master.createChannelMerger(this.maxChannels) // +1 master clock
+    this.masterClock = jsynth(master, this.tick)
+    this.recording = 0 
+    this.recNode = jsynthb(master, (input, output) => {
+      let fn = this.reckon(this.recording)
+      fn.call(this, input)
+      output.set(input)
+    }, Math.pow(2, 16))
+    this.streamBuf = jstreambuf(master, null, (e, source)=>{
+      if(e) console.log(e) 
+    })
+    this.reckon = iff(input=>{
+        this.streamBuf.push(input.slice(0))
+        return true
+      }, ()=>{
+        return false
+    })
+    this.masterFX = new Synth(master)
+    this.masterFX.source = this.output
+    this.masterFX.destination = this.recNode
+    this.masterFX.connect()
+  }
+  
+  get destination(){
+    return this.output
+  }
+
+
+  play(){
+    if(this.playing) return 
+    this.masterClock.connect(this.master.destination)
+    this.master.resume()
+    this.playing = true
+    this.recNode.connect(this.master.destination)
+  }
+
+  stop(){
+    this.playing = false
+    this.masterClock.disconnect(this.master.destination)
+    this.recNode.disconnect(this.master.destination)
+  }
+
+  record(){
+    this.recording = this.recording ? 0 : 1
+    if(recording){
+      this.streamBuf = jstreambuf(master, null, (e, source)=>{
+        if(e) console.log(e) 
+      })
+      this.currentTrack = streambuf
+      rec.connect(master.destination)
+      this.play()
+    }
+  }
+
+  download(name=new Date().getTime(), cb=()=>{}){
+    if(this.currentTrack){
+      var blob = this.track.getBuffer().buffer
+      dlblob(new Float32Array(blob), this.sampleRate, null, true, (e, a)=>{
+        // a is href to dom blob
+        a.name = name
+        cb(err, a)
+        this.currentTrack = undefined
+      })
+    }
+  }
+
+
+  tick(t){
+    this.time = t
+    this.clocks.forEach(e => e.tick(t))
+  }
+
+  createClock(bpm=60){
+    let clock = new Clock(this.sampleRate, bpm)
+    this.clocks.push(clock)
+    return clock
+  }
+  
+  createEvent(){
+  
+  }
+
+  createSynth(){
+  
+  }
+
+  createSample(){}
+
+  createMic(){}
+  
+  disconnect(node){
+    node.disconnect(this.output)
+    node.connected = false 
+    this.channels-=1
+  }
+
+  connect(node){
+    this.connected.push(node)
+    this.channels+=1
+    node.connect(this.output, 0, this.channels)
+    node.connected = true
+    this.updateChannelMerger()
+  }
+  
+  updateChannelMerger(){
+    if(this.channels == this.maxChannels){
+      let prev = this.output
+      this.max *= 2
+      let next = this.master.createChannelMerger(this.max)
+      this.masterFX.disconnect()
+      this.masterFX.source = next
+      this.masterFX.connect()
+      this.reconnect(prev, next)
+      this.output = next
+    }
+  }
+  
+  reconnect(prev, next){
+    this.connected.forEach(e => {
+      if(e.connected) {
+        e.disconnect(prev)
+        e.connect(next)
+      }
+    })
+  }
+
+  clearClocks(){
+    this.clocks = [] 
+  }
+
+  clearConnections(){
+    this.connections.forEach(e => e.disconnect(this.output)) 
+  }
+
+  clearAll(){
+    this.clearConnections()
+    this.clearClocks()
+  }
+
+
+}
+
+module.exports = {Synth, PolySynth, Clock, Event}
 // ideal
 /*
 

@@ -1,4 +1,4 @@
-var {Clock, Event} = require('./default.js')
+var {Clock, Event} = require('./default.js')({sampleRate: 100})
 
 clock = new Clock(10)
 clock.beats = [1, [{g: 8/5},['two',3]],0,[{four: 4},0,0,5]]

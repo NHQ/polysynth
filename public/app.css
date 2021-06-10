@@ -1,6 +1,9 @@
-body{
-  overflow:hidden;
+html{
+  width:100%;
   height:100%;
+}
+body{
+  width:100%;
 }
 
 #ascope{
@@ -13,7 +16,7 @@ body{
 
 textarea#texted{
   width: 100%;
-  height: 100%;
+  height: 50%;
   overflow-y: scroll;
   box-sizing:border-box;
   color: white;
@@ -67,9 +70,22 @@ input[type=text]{
 }
 
 #controls, #system{
-  min-height:50%;
   width:100%;
+  height:100%;
   border: 7px solid grey;
   border-bottom: none;
-  box-sizing: border-box
+  box-sizing: border-box;
+  padding:1em;
+  overflow-y: scroll;
+}
+
+.column{
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+
+}
+
+p{
+  margin:0; 
 }

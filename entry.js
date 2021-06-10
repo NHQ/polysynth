@@ -5,12 +5,14 @@ compressor.threshold.value = -30;
 compressor.knee.value = -20;
 compressor.ratio.value = 12*2;
 */
-
+var Timer = require('../since-when')
+window.timer = new Timer
 var fs = require('fs')
 var pcode = fs.readFileSync('./synths/midi.js', 'utf8')
 var jsynth = require('../jsynth')
 var jsynthb = require('../jsynth-buffer')
 var dial = require('../parametrical/knob')
+var fileSample = require('../jsynth-file-sample')
 var draw = require('./draw')
 var _import = require('./import')
 var cheatcode = require('./cheatcode.js')
@@ -23,8 +25,10 @@ var keycode = require('keycode')
 var webmidi = require('web-midi')
 var h = require('hyperscript')
 var filebutton = require('file-button')
-var streamBuff = require('../jsynth-stream-buf')
+//var streamBuff = require('../jsynth-stream-buf')
 //var log = require('./swarm')
+
+var {Synth, PolySynth, Event, Clock} = require('./default.js')(master)
 var jstreambuf = require('../jsynth-stream-buf')
 var dlblob = require('./blob')
 var dsp = undefined 
@@ -39,24 +43,36 @@ var start = document.querySelector('#start')
 var system = document.querySelector('#system')
 var midis = document.querySelector('#midi')
 var ui = require('getids')()
-texted.value = fs.readFileSync('./synth.js', 'utf8')//window.localStorage['polysynth']//'http://studio.substack.net/supergroup?time=1447325050841'
+console.log(ui)
+texted.value = window.localStorage['polysynth']//'http://studio.substack.net/supergroup?time=1447325050841'
 var ed = require('../jsynth-script-node/allone.js')({cb: compile,edbox: texted})
 ed.editor.editor.scrollTo(0,0);
 ed.editor.editor.setCursor({line:0, char:0});
 var started = false 
 var recording = false 
-compile()
+//compile()
 var samples = []
 
+polysynth = new PolySynth()
+var click = polysynth.createClock(120)
+polysynth.samples = samples
+click.pattern = [1,1,1,1]
+
+var click2 = polysynth.createClock(120)
+click2.pattern = [1,0,1,0]
+click2.bpm = click.bpm = 120
+console.log(Object.getOwnPropertyNames(Object.getPrototypeOf(polysynth)))
+console.log(click)
 filebutton.create({accept: 'audio/*'}).on('fileinput',function(input){
   _import(input.files, function(files){
     files.forEach(function(e, i){
-      createSample(e.buffer, function(_sample){
+      createSample(polysynth.master, e.buffer, function(_sample){
         var n = files[i].name
         n = n.slice(0, n.lastIndexOf('.'))
         _sample.name = n
         _sample.index = samples.length
-        samples.push(_sample)
+        let si = samples.push(_sample)
+        ui.samples.appendChild(h('p', `[${si-1}] — ${n}`)) 
       })
     })
   })
@@ -117,15 +133,12 @@ ui.record.onclick = e => {
 
 start.onclick = function(e){
   started = !started
-  if(started){
-    master.resume().then(() => {
-      autoSynth.connect(master.destination)
-    })
-window.requestAnimationFrame(function(t){
  // anim()
+ polysynth.play()
+  master.resume().then(function(){
+//  click.trigger(polysynth.createSample(samples[0]))
+//  click2.trigger(polysynth.createSample(samples[1]))
 })
-  }
-  else autoSynth.disconnect(master)
 }
 //var drawer = draw(ampbox, master)
 //drawer.setBuffer(app.process(6, 0))
@@ -191,7 +204,6 @@ texted.addEventListener('keydown', function(e){
   }
   }
 })
-*/
 function fetch(v){
   var p = url.parse(inpu.value)
   p.search = p.search || ''
@@ -206,43 +218,25 @@ function fetch(v){
 function viz(){
   
 }
+*/
 
+  cheatcode.fileSample = fileSample 
 function compile(txt){
   var script = txt || texted.value
   window.localStorage['polysynth'] = script 
-
-    var prefun = new Function(['samples', '$', 'sampleRate', 'master'], script)
-    //console.log(fn)
-    var fn = prefun(samples,cheatcode, master.sampleRate, master)
     
-    //fn = prefun($ui, cheatcode, self.sampleRate)
-    var dsp = function(t, c, i){
-      return fn(t, c, i)
-    }
-    console.log(dsp)
-  //app = app || require('./')(master)
-  //fn = new Function('', dsp)
-
-  var _auto = dsp// app.stateSynth(script)
-  //console.log(_auto)
-  //_auto.ui.forEach(e => ctrlbox.appendChild(e.el))
+  var prefun = new Function(['samples', '$', 'sampleRate', 'master'], script)
+  //console.log(fn)
+  var fn = prefun(samples,cheatcode, master.sampleRate, master)
   
-  if(!window.autoSynth){
-    auto = _auto
-    autoSynth = jsynth(master,auto,Math.pow(2, 12))
-    window.autoSynth = autoSynth
-    console.log(typeof autoSynth)
- //   autoSynth.connect(master.destination)
-    //autoSynth.connect(compressor)
-    //compressor.connect(master.destination)
+  //fn = prefun($ui, cheatcode, self.sampleRate)
+  var dsp = function(t, c, i){
+    return fn(t, c, i)
   }
-  else window.requestAnimationFrame(function(){
-    auto = window.autoSynth.fn = _auto
-  })
 
   
 }  
-function createSample(buff, cb){
+function createSample(master, buff, cb){
   if(Array.isArray(buff)){
     
     // buf is an array of channel datas in float32 type arrays

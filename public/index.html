@@ -14,20 +14,30 @@
       <button class=fetch>fetch</button>
       <div id=ascope></div>      
     </div-->
-    <div id=editor>
-      <!--textarea id=texted></textarea-->
-    </div>
     <div id=sidebar>
       <div id=system>
-        <button id=start>play</button>
-        <button id=record>record</button>
-        <button id=import>import</button>
-        <div id=midi>
-        <div id=samples class="column"></div>
+        <div class=buttonCol>
+          <div class=button id=start>PLAY</div>
+          <div class=button id=pause>PAUSE</div>
+        </div>
+        <div class=buttonCol>
+          <div class=button id=record>RECORD</div>
+          <div class=button id=stop>STOP</div>
+        </div>
+        <div class=buttonCol>
+          <div class=button id=import>IMPORT SAMPLES</div>
+        </div>
+        <div class=buttonCol>
+          <select id=midi name=midis class=drop><option value="">&nbsp SELECT MIDI OUT</option></select>
         </div>
       </div>
-
-      <div id=controls class=hidden></div>
+      <div id=samples class="column">
+      
+      </div>
+    </div>
+    </div>
+    <div id=editor>
+      <!--textarea id=texted></textarea-->
     </div>
     <script type="text/javascript" src="bundle.js"></script>
   </body>

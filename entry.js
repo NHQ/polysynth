@@ -5,6 +5,18 @@ compressor.threshold.value = -30;
 compressor.knee.value = -20;
 compressor.ratio.value = 12*2;
 */
+var iframe = require('../iframarfi')
+var render = iframe(require('./render.js'))
+render.style.display ='none'
+document.body.appendChild(render)
+
+window.addEventListener('load', e => {
+  window.addEventListener('message', e => console.log('msg', e.data))
+
+})
+
+
+
 var Timer = require('../since-when')
 window.timer = new Timer
 var fs = require('fs')
@@ -25,6 +37,7 @@ var keycode = require('keycode')
 var webmidi = require('web-midi')
 var h = require('hyperscript')
 var filebutton = require('file-button')
+const series = require('run-series')
 //var streamBuff = require('../jsynth-stream-buf')
 //var log = require('./swarm')
 
@@ -53,53 +66,114 @@ var recording = false
 //compile()
 var samples = []
 
-polysynth = new PolySynth()
-var click = polysynth.createClock(120)
+ps = polysynth = new PolySynth()
 polysynth.samples = samples
-click.pattern = [1,1,1,1]
 
-var click2 = polysynth.createClock(120)
-click2.pattern = [1,0,1,0]
-click2.bpm = click.bpm = 120
 console.log(Object.getOwnPropertyNames(Object.getPrototypeOf(polysynth)))
-console.log(click)
 filebutton.create({accept: 'audio/*'}).on('fileinput',function(input){
   _import(input.files, function(files){
-    files.forEach(function(e, i){
-      createSample(polysynth.master, e.buffer, function(_sample){
-        var n = files[i].name
-        n = n.slice(0, n.lastIndexOf('.'))
-        _sample.name = n
-        _sample.index = samples.length
-        let si = samples.push(_sample)
-        ui.samples.appendChild(h('p', `[${si-1}] — ${n}`)) 
-      })
+    var tasks = files.map(function(e, i){
+      return function(cb){
+        createSample(polysynth.master, e.buffer, function(_sample){
+          var n = files[i].name
+          n = n.slice(0, n.lastIndexOf('.'))
+          //_sample.name = n
+          //_sample.index = samples.length
+          let si = samples.push(n)
+          ui.samples.appendChild(h('div.sample', h('p', `[${si-1}] — ${n}`)))
+          render.contentWindow.postMessage({type: 'sample', value: _sample.buffer})
+          cb(null, _sample)
+        })
+       }
+    })
+    series(tasks, (e, _samples) => {
+      if(e) console.log(e)
+          
     })
   })
 }).mount(ui.import)
-/*
+
+class Beat extends Clock {
+
+  constructor(bpm=60, interval=1, pattern=[1]) {
+    super(bpm, interval, pattern)
+    ps.registerClock(this)
+    this.trigger = evt => 0
+    this.onbeat = evt=> {
+      if(Boolean(evt.value)) this.trigger(evt)
+      else return 0
+    }
+  }
+}
+
+class Phrase extends Beat {
+
+  constructor(bpm=60, interval=1, pattern=[1]) {
+  
+    super(bpm, interval, pattern)
+    this.trigger = function(evt){
+      if(typeof evt.value == 'object'){
+        Object.values.forEach(v => {
+          let e = polysynth.createSample(v)
+          polysynth.connect(e)
+          e.onended = ex => polysynth.disconnect(e)
+        })
+      }
+    }
+  }
+}
+class Measure extends Beat{
+
+  constructor(bpm=60, interval=1, pattern=[1]) {
+  
+    super(bpm, interval, pattern)
+    this.noteOn = e => 0
+    this.noteOff = e => 0
+    this.trigger = evt => {
+      evt.type = 1 
+      this.noteOn(evt)
+      var interval = evt.value
+      var self = this
+      if(typeof evt.value == 'object'){
+        interval = evt.value.duration
+      }
+      var clock = new Clock(this._bpm, interval, [0,1])
+      ps.registerClock(clock)
+      clock.onbeat = evtx => {
+        evt.type = 0 
+        self.noteOff(evt)
+        clock.release()
+      }
+    }
+  }
+}
+
+
+//window.midi = webmidi({index: 0, normalizeNotes: false})
+
+
 require('./source.js')(s=>{
   webmidi.getPortNames(function(e,d){
-    midis.appendChild(h('ul', d.map(e => h('li',
-      h('label', e,
-       h('input', {type: 'checkbox', id: e, value: e, onclick: function(evt){
-         var value = 0
-         let last = 0
-         let stream = webmidi.openInput(e, {index: 0, normalizeNotes: false})
-         stream.on('data', d => {
-          console.log(d)
-           if(d[1] < 32) {
-            if(d[2] > 0 && d[2] >= last) value ++
-            else value--
-            last = d[2]
-            console.log(last, value)
-          }
-         })
-       }}))
-    ))))
+     d.forEach((e,i) => {
+       let el = document.createElement('option')
+       el.value = e
+       el.id = i
+       el.innerText = e
+       el.selected = false
+       midis.appendChild(el)
+     })
   })
 })
-*/
+
+midis.onchange = function(evt){
+  console.log(this, this.value, evt.target[1] )
+  let v = this.value
+  Array.prototype.forEach.call(evt.target, (e,i) => {
+    if(e.value == v){ // note the dummy -1 b/c there is a dummy option
+      window.midi = webmidi(v, {index: i-1 , normalizeNotes: false})
+    }
+  }) 
+}
 var track, rec
 ui.record.onclick = e => {
   recording = !recording
@@ -132,13 +206,10 @@ ui.record.onclick = e => {
 }
 
 start.onclick = function(e){
-  started = !started
- // anim()
- polysynth.play()
-  master.resume().then(function(){
-//  click.trigger(polysynth.createSample(samples[0]))
-//  click2.trigger(polysynth.createSample(samples[1]))
-})
+  render.contentWindow.postMessage({
+    type: 'system',
+    value: 'start'
+  })
 }
 //var drawer = draw(ampbox, master)
 //drawer.setBuffer(app.process(6, 0))
@@ -222,20 +293,28 @@ function viz(){
 
   cheatcode.fileSample = fileSample 
 function compile(txt){
+
+  render.contentWindow.postMessage({
+    type: 'compile',
+    value: txt
+  })
+  
+/*
   var script = txt || texted.value
   window.localStorage['polysynth'] = script 
     
-  var prefun = new Function(['samples', '$', 'sampleRate', 'master'], script)
+  var prefun = new Function(['samples', '$', 'sampleRate', 'master', 'Clock', 'Measure', 'Beat', 'Phrase'], script)
   //console.log(fn)
-  var fn = prefun(samples,cheatcode, master.sampleRate, master)
+  var fn = prefun(samples,polysynth, master.sampleRate, master, Clock, Measure)
   
   //fn = prefun($ui, cheatcode, self.sampleRate)
   var dsp = function(t, c, i){
     return fn(t, c, i)
   }
-
+*/
   
 }  
+
 function createSample(master, buff, cb){
   if(Array.isArray(buff)){
     

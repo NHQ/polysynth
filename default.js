@@ -2,6 +2,7 @@ const jsynth = require('../jsynth')
 const jsynthb = require('../jsynth-buffer')
 const jstreambuf = require('../jsynth-stream-buf')
 const dlblob = require('./blob.js')
+const fileSample = require('../jsynth-file-sample')
 
 // editor console keeps track of variables?
 // also gives instances auto named variables??
@@ -100,19 +101,28 @@ module.exports = function(master){
 
   class Clock {
 
-    constructor(sampleRate=8000, bpm=60, interval=1, beats=[1]){
-      this.index = 0
+    constructor(bpm=60, interval=1, beats=[1]){
+      var sampleRate = 8000
+      this.index = -1
       this.paused = false
-      this._sampleRate = sampleRate //master.sampleRate
+      this._sampleRate = 8000//sampleRate //master.sampleRate
       this._bpm = bpm
       this._interval = interval
       this._beats = beats
       this.samplesPerBeat = Math.round( sampleRate / ( bpm / 60 ) )
       this.beatCount = 0
       this.events = []
-      this.onbeat = () => 0
-      this.nonbeat = () => 0
-      this.checkBeat = iff(t=>this.onbeat, f=>this.nonbeat)
+      this._abs = (i) => this.index++
+      this._rel = (i) => this.index = i
+      this.checkBeat = iff(i => this.index = i, i => this.index++)
+      this._relative = 1
+    }
+
+    set relativity(e){
+      this._relative = Number(Boolean(e))
+      if(!e){
+        this.index = -1
+      }
     }
 
     set bpm(_bpm){
@@ -141,9 +151,11 @@ module.exports = function(master){
       this.samplesPerBeat = Math.round( this._sampleRate / ( this._bpm / 60 ) )
     }
 
-    tick(sysTime){
+    tick(sysTime, sysIndex){
       if(this.paused) return
 
+      //this.index = sysIndex
+      this.checkBeat(this._relative)(sysIndex)
       let i = Math.ceil(this.samplesPerBeat * this._interval)
       let s = this.index
       // the current major interval:
@@ -151,59 +163,53 @@ module.exports = function(master){
       this.beatCount = b + 1 
       this._i = b % this._beats.length
       this._tick(this.index, this._interval, this._beats, this._i, sysTime)
-      this.index++
+      //this.index++
      // this.index = this.index % this.samplesPerBeat
     }
 
     _tick(index, inter, beats, current, time){
       let i = Math.ceil(this.samplesPerBeat*inter)
       let s = index
-      if(Array.isArray(beats[current])){
+      let ifa = Number(Array.isArray(beats[current]))
+      let ifb = !(s % i) // Math.min(1, Math.max(s % i, 0))
+      let ifc = Number(!!beats[current] && ifb)
+      let self = this
+      let elze = iff(function(){
+        //console.log('YEET')
+        self._trigger(beats[current], self._i, current, time)
+      }, v => 0)(ifc)
+      let ifn = iff(function(){
         let z = s - i * current
-        z = z % this.samplesPerBeat
+        z = z % self.samplesPerBeat
       //console.log(index, current, z)
         let y = beats[current]
         let val =  inter / y.length
-        let c = Math.floor(z / Math.ceil(this.samplesPerBeat * val)) % y.length
+        let c = Math.floor(z / Math.ceil(self.samplesPerBeat * val)) % y.length
        //console.log(y)
         //console.log(x, y, val, z, c)
-        this._tick(z, val, y, c, time)
-      }
+        self._tick(z, val, y, c, time)
+      }, elze)(ifa)
+
+      ifn()
       
-      //this.cheackBeat(Math.min(1, Math.max(s % i, 1)){
-      else if(s % i == 0){
-        //console.log(s, i, s/this.samplesPerBeat)
-        if(beats[current]){
-  //console.log(this._i, current, beats)
-          this._trigger(beats[current], this._i, current, time)
-        }
-      }
-      else{
-        //console.log('non', beats[current], s , i)
-      } 
+      
     }
     
-    trigger(event){
-      this.events.push(event)
-      return this
-    }
-
     _trigger(event, beat, sub, time){
-      if(!(event instanceof Object)){
-        event = { value : event }
-      }
+      event = { value : event }
       event.interval = beat
       event.beat = sub
       event.time = time
       event.clock = this
       event.count = this.beatCount
+      this.onbeat(event)
+
+      /*
       this.events.forEach(e => {
         event.triggered = e
         //e.connect(master.destination)
         this.onbeat(event)
       })
-
-      /*
 
       this.events.forEach(evt => {
         if(evt instanceof AudioNode){
@@ -246,21 +252,25 @@ module.exports = function(master){
       this.sampleRate = master.sampleRate
       // keep parameterized history of events for replay, do OSC?
       // somewhere else ^^^
+      this.recording = this.playing = false
+      this.incr = 0
       this.clockTime = 0
       this.clocks = [] // zo'os
+      this._clocks = {}
       this.connected = []
       this.samples = []
+      this.tracks = []
       this.channels = 0
-      this.maxChannels = 12
+      this.maxChannels = 32
       this.output = master.createChannelMerger(this.maxChannels) // +1 master clock
       this.nodeToChannel = {}
       this.idToNode = {}
       this.availableInputs = new Array(this.maxChannels).fill(0).map((e,i)=> i)
       let self = this
-      this.masterClock = jsynth(master, function(t){
-        self.tick(t)
+      this.masterClock = jsynth(master, function(t, i){
+        self.tick(t, i)
         return 0
-      }, 256)
+      }, 256*2)
       this.recording = 0 
       this.recNode = jsynthb(master, (input, output) => {
         let fn = this.reckon(this.recording)
@@ -319,51 +329,80 @@ module.exports = function(master){
 
     record(){
       this.recording = this.recording ? 0 : 1
-      if(recording){
+      if(this.recording){
         this.streamBuf = jstreambuf(master, null, (e, source)=>{
           if(e) console.log(e) 
         })
-        this.currentTrack = streambuf
-        rec.connect(master.destination)
-        this.play()
+        this.currentTrack = this.streamBuf
+        if(!this.playing) this.play()
+      }
+      if(this.currentTrack){
+        let i = this.tracks.push(this.currentTrack)
+        //this.download(i)
+        this.currentTrack = null
       }
     }
 
-    download(name=new Date().getTime(), cb=()=>{}){
-      if(this.currentTrack){
-        var blob = this.track.getBuffer().buffer
+    download(i, name=new Date().getTime(), cb=()=>{}){
+      let track = this.tracks[i]
+      if(track){
+        var blob = track.getBuffer().buffer
         dlblob(new Float32Array(blob), this.sampleRate, null, true, (e, a)=>{
           // a is href to dom blob
           a.name = name
-          cb(err, a)
-          this.currentTrack = undefined
+          cb(e, a)
+          //audio mergenode silentthis.currentTrack = undefined
         })
       }
     }
 
 
-    tick(t){
+    tick(t, i){
       this.time = t
-      this.clocks.forEach(e => e.tick(t))
+      this.clocks.forEach(e => e.tick(t,i))
+    }
+
+    registerClock(clock){
+      clock.sampleRate = this.sampleRate
+      let id = ++this.incr
+      clock._id = id 
+      this._clocks[id] = clock
+      this.clocks = Object.values(this._clocks)
+      let self = this
+      clock.release = _ => {
+        delete self._clocks[id] 
+        this.clocks = Object.values(this._clocks)
+      }
     }
 
     createClock(bpm=60, interval=1, pattern=[1]){
       let clock = new Clock(this.sampleRate, bpm, interval, pattern)
       //clock.sampleRate = this.sampleRate
       this.clocks.push(clock)
-      const self = this
+      let id = ++this.incr
+      clock._id = id 
+      this._clocks[id] = clock
+
+      this.clocks = Object.values(this._clocks)
+      let self = this
+      clock.release = _ => {
+        delete self._clocks[id] 
+        this.clocks = Object.values(this._clocks)
+      }
       clock.onbeat = event => {
         let evt = event.triggered
+        evt = self.createSample(evt)
+        evt.id = ++self.incr
           //console.log(evt)
         if(evt instanceof AudioNode){
           try{
-            evt.connect(master.destination)
-            evt.start(0)
+            self.connect(evt)//.connect(master.destination)
+            //evt.start(0)
             //evt.play()
             evt.onended = function(){
               //console.log('ended')
-              evt.disconnect(master.destination)
-              //self.disconnect(evt)
+              //evt.disconnect()
+              self.disconnect(evt)
             }
           } catch(err){console.log(err)}
         } 
@@ -386,7 +425,8 @@ module.exports = function(master){
     }
 
     createSample(i){
-      let sam = jstreambuf(this.master, i)
+      //let sam = jstreambuf(this.master, i)
+      let sam = fileSample(this.master, i) 
       return sam
     }
 
@@ -395,37 +435,40 @@ module.exports = function(master){
     disconnect(node){
       let chan = this.nodeToChannel[node.id]
       node.disconnect(this.output)
-      node.connected = false 
-      this.channels-=1
-      this.availableInputs.push(chan)
-      delete this.nodeToChan[node.id]
+    //  node.connected = false 
+      //console.log('dis', chan)
+      //this.channels-=1
+      
+      //this.availableInputs.push(chan)
+      //this.nodeToChannel[node.id] = null 
     }
 
     connect(node){
       //this.connected.push(node)
-      console.log(node)
-      this.channels+=1
-      if(node.id == undefined) node.id = Math.random()
+      //console.log(node)
+      if(node.id == undefined) node.id = this.channels+Math.random()
       this.idToNode[node.id] = node
-      let first = this.availableInputs.shift()
+      let first = this.channels % this.maxChannels//this.availableInputs.shift()
+      //console.log('con',first, first)
       this.nodeToChannel[node.id] = first
-      node.connect(this.master.destination)//, 0, first)
+      node.connect(this.output)//master.destination)
       node.start(0)
-      node.connected = true
+      //node.connected = true
+      this.channels+=1
       //this.updateChannelMerger()
     }
     
     updateChannelMerger(){
       if(this.availableInputs.length == 0){ //this.channels == this.maxChannels-1){
         let prev = this.output
+        this.availableInputs = this.availableInputs.concat(new Array(this.maxChannels).fill(0).map((e,i)=>i+this.maxChannels))
         this.maxChannels *= 2
-        this.availableInputs = new Array(this.maxChannels).fill(0).map((e,i)=>i).slice(this.maxChannels/2,this.maxChannels)
         let next = this.master.createChannelMerger(this.maxChannels)
         this.reconnect(prev, next)
+        this.output = next
         this.masterFX.disconnect()
         this.masterFX.source = next
         this.masterFX.connect()
-        this.output = next
       }
     }
     
@@ -437,7 +480,13 @@ module.exports = function(master){
       }
     }
 
+    clearClock(id){
+      if(id instanceof Clock) id = id.id
+      delete this._clocks[id]
+      this.clocks = Object.values(this._clocks)
+    }
     clearClocks(){
+      this._clocks = {}
       this.clocks = [] 
     }
 
